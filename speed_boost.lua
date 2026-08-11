@@ -18,6 +18,12 @@ local Config = {
     },
 }
 
+local Hotkeys = {
+    Fly = Config.Hotkeys.Fly,
+    Noclip = Config.Hotkeys.Noclip,
+    ToggleGUI = Config.Hotkeys.ToggleGUI,
+}
+
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -33,7 +39,11 @@ local State = {
     flyEnabled = false,
     noclipEnabled = false,
     guiVisible = true,
+    settingsOpen = false,
 }
+
+local rebindTarget = nil
+local rebindButton = nil
 
 local character = LocalPlayer.Character
 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -196,28 +206,65 @@ local function setNoclip(enabled)
     end
 end
 
--- GUI
+-- GUI helpers
+local function keyLabel(keyCode)
+    if not keyCode or keyCode == Enum.KeyCode.Unknown then
+        return "?"
+    end
+    return keyCode.Name
+end
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SpeedBoostGUI"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = getParentGui()
 
+local function addCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 6)
+    c.Parent = parent
+    return c
+end
+
+-- Floating button — always visible, opens/closes menu
+local menuToggleBtn = Instance.new("TextButton")
+menuToggleBtn.Name = "MenuToggle"
+menuToggleBtn.Size = UDim2.new(0, 44, 0, 44)
+menuToggleBtn.Position = UDim2.new(0, 20, 0.5, -160)
+menuToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 110, 220)
+menuToggleBtn.BorderSizePixel = 0
+menuToggleBtn.Font = Enum.Font.GothamBold
+menuToggleBtn.TextSize = 18
+menuToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuToggleBtn.Text = "X"
+menuToggleBtn.ZIndex = 10
+menuToggleBtn.Parent = screenGui
+addCorner(menuToggleBtn, 22)
+
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 260, 0, 280)
-mainFrame.Position = UDim2.new(0, 20, 0.5, -140)
+mainFrame.Size = UDim2.new(0, 260, 0, 318)
+mainFrame.Position = UDim2.new(0, 72, 0.5, -159)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Parent = screenGui
+addCorner(mainFrame, 8)
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = mainFrame
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Name = "Settings"
+settingsFrame.Size = UDim2.new(0, 260, 0, 318)
+settingsFrame.Position = mainFrame.Position
+settingsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+settingsFrame.BorderSizePixel = 0
+settingsFrame.Visible = false
+settingsFrame.Active = true
+settingsFrame.Parent = screenGui
+addCorner(settingsFrame, 8)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -16, 0, 32)
+title.Size = UDim2.new(1, -80, 0, 32)
 title.Position = UDim2.new(0, 8, 0, 8)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
@@ -226,6 +273,30 @@ title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = "Speed Script"
 title.Parent = mainFrame
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 28)
+closeBtn.Position = UDim2.new(1, -36, 0, 10)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+closeBtn.BorderSizePixel = 0
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Text = "X"
+closeBtn.Parent = mainFrame
+addCorner(closeBtn, 6)
+
+local settingsOpenBtn = Instance.new("TextButton")
+settingsOpenBtn.Size = UDim2.new(0, 28, 0, 28)
+settingsOpenBtn.Position = UDim2.new(1, -68, 0, 10)
+settingsOpenBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+settingsOpenBtn.BorderSizePixel = 0
+settingsOpenBtn.Font = Enum.Font.GothamBold
+settingsOpenBtn.TextSize = 14
+settingsOpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+settingsOpenBtn.Text = "⚙"
+settingsOpenBtn.Parent = mainFrame
+addCorner(settingsOpenBtn, 6)
 
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -16, 0, 20)
@@ -238,7 +309,10 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Text = "Статус: ..."
 statusLabel.Parent = mainFrame
 
-local function makeButton(text, yPos, callback)
+local flyBtn, noclipBtn, speedToggleBtn, hintLabel
+local bindButtons = {}
+
+local function makeButton(parent, text, yPos, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -16, 0, 32)
     btn.Position = UDim2.new(0, 8, 0, yPos)
@@ -248,14 +322,65 @@ local function makeButton(text, yPos, callback)
     btn.TextSize = 14
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Text = text
-    btn.Parent = mainFrame
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 6)
-    btnCorner.Parent = btn
-
+    btn.Parent = parent
+    addCorner(btn, 6)
     btn.MouseButton1Click:Connect(callback)
     return btn
+end
+
+local function updateActionButtons()
+    flyBtn.Text = string.format("Fly: %s  [%s]", State.flyEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Fly))
+    noclipBtn.Text = string.format("Noclip: %s  [%s]", State.noclipEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Noclip))
+    hintLabel.Text = string.format("%s — меню | ⚙ — настройки биндов\nРаботает не во всех играх", keyLabel(Hotkeys.ToggleGUI))
+end
+
+local function updateBindButtons()
+    for name, btn in pairs(bindButtons) do
+        btn.Text = string.format("%s: [%s]", bindLabels[name], keyLabel(Hotkeys[name]))
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    end
+end
+
+local function setMenuVisible(visible)
+    State.guiVisible = visible
+    mainFrame.Visible = visible
+    if not visible then
+        settingsFrame.Visible = false
+        State.settingsOpen = false
+    end
+    menuToggleBtn.Text = visible and "X" or ">"
+    menuToggleBtn.BackgroundColor3 = visible
+        and Color3.fromRGB(180, 60, 60)
+        or Color3.fromRGB(50, 110, 220)
+end
+
+local function openSettings()
+    State.settingsOpen = true
+    mainFrame.Visible = false
+    settingsFrame.Visible = true
+    updateBindButtons()
+end
+
+local function closeSettings()
+    State.settingsOpen = false
+    settingsFrame.Visible = false
+    mainFrame.Visible = State.guiVisible
+end
+
+local function cancelRebind()
+    rebindTarget = nil
+    rebindButton = nil
+    updateBindButtons()
+end
+
+local function startRebind(bindName, btn)
+    if rebindTarget then
+        cancelRebind()
+    end
+    rebindTarget = bindName
+    rebindButton = btn
+    btn.Text = "Нажмите клавишу..."
+    btn.BackgroundColor3 = Color3.fromRGB(80, 120, 200)
 end
 
 local speedLabel = Instance.new("TextLabel")
@@ -277,10 +402,7 @@ speedSlider.BorderSizePixel = 0
 speedSlider.Text = ""
 speedSlider.AutoButtonColor = false
 speedSlider.Parent = mainFrame
-
-local sliderCorner = Instance.new("UICorner")
-sliderCorner.CornerRadius = UDim.new(1, 0)
-sliderCorner.Parent = speedSlider
+addCorner(speedSlider, 4)
 
 local sliderFill = Instance.new("Frame")
 sliderFill.Size = UDim2.new(
@@ -292,25 +414,22 @@ sliderFill.Size = UDim2.new(
 sliderFill.BackgroundColor3 = Color3.fromRGB(80, 160, 255)
 sliderFill.BorderSizePixel = 0
 sliderFill.Parent = speedSlider
+addCorner(sliderFill, 4)
 
-local fillCorner = Instance.new("UICorner")
-fillCorner.CornerRadius = UDim.new(1, 0)
-fillCorner.Parent = sliderFill
+speedToggleBtn = makeButton(mainFrame, "Speed: ВКЛ", 108, function() end)
 
-local speedToggleBtn = makeButton("Speed: ВКЛ", 108, function() end)
-
-local flyBtn = makeButton("Fly: ВЫКЛ  [F]", 148, function()
+flyBtn = makeButton(mainFrame, "Fly: ВЫКЛ", 148, function()
     setFly(not State.flyEnabled)
-    flyBtn.Text = State.flyEnabled and "Fly: ВКЛ  [F]" or "Fly: ВЫКЛ  [F]"
+    updateActionButtons()
 end)
 
-local noclipBtn = makeButton("Noclip: ВЫКЛ  [N]", 188, function()
+noclipBtn = makeButton(mainFrame, "Noclip: ВЫКЛ", 188, function()
     setNoclip(not State.noclipEnabled)
-    noclipBtn.Text = State.noclipEnabled and "Noclip: ВКЛ  [N]" or "Noclip: ВЫКЛ  [N]"
+    updateActionButtons()
 end)
 
-local hintLabel = Instance.new("TextLabel")
-hintLabel.Size = UDim2.new(1, -16, 0, 40)
+hintLabel = Instance.new("TextLabel")
+hintLabel.Size = UDim2.new(1, -16, 0, 48)
 hintLabel.Position = UDim2.new(0, 8, 0, 232)
 hintLabel.BackgroundTransparency = 1
 hintLabel.Font = Enum.Font.Gotham
@@ -318,8 +437,74 @@ hintLabel.TextSize = 11
 hintLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
 hintLabel.TextXAlignment = Enum.TextXAlignment.Left
 hintLabel.TextWrapped = true
-hintLabel.Text = "RightShift — скрыть GUI\nРаботает не во всех играх"
 hintLabel.Parent = mainFrame
+
+-- Settings panel
+local settingsTitle = Instance.new("TextLabel")
+settingsTitle.Size = UDim2.new(1, -16, 0, 32)
+settingsTitle.Position = UDim2.new(0, 8, 0, 8)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.TextSize = 16
+settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+settingsTitle.Text = "Настройки биндов"
+settingsTitle.Parent = settingsFrame
+
+local settingsHint = Instance.new("TextLabel")
+settingsHint.Size = UDim2.new(1, -16, 0, 36)
+settingsHint.Position = UDim2.new(0, 8, 0, 40)
+settingsHint.BackgroundTransparency = 1
+settingsHint.Font = Enum.Font.Gotham
+settingsHint.TextSize = 12
+settingsHint.TextColor3 = Color3.fromRGB(160, 160, 160)
+settingsHint.TextXAlignment = Enum.TextXAlignment.Left
+settingsHint.TextWrapped = true
+settingsHint.Text = "Нажмите на бинд и нажмите новую клавишу"
+settingsHint.Parent = settingsFrame
+
+local bindNames = { "ToggleGUI", "Fly", "Noclip" }
+local bindLabels = {
+    ToggleGUI = "Меню",
+    Fly = "Fly",
+    Noclip = "Noclip",
+}
+
+for i, bindName in ipairs(bindNames) do
+    local btn = makeButton(settingsFrame, bindLabels[bindName] .. ": [...]", 88 + (i - 1) * 40, function()
+        startRebind(bindName, btn)
+    end)
+    bindButtons[bindName] = btn
+end
+
+makeButton(settingsFrame, "Сбросить бинды", 208, function()
+    Hotkeys.Fly = Config.Hotkeys.Fly
+    Hotkeys.Noclip = Config.Hotkeys.Noclip
+    Hotkeys.ToggleGUI = Config.Hotkeys.ToggleGUI
+    cancelRebind()
+    updateBindButtons()
+    updateActionButtons()
+end)
+
+makeButton(settingsFrame, "← Назад", 248, function()
+    cancelRebind()
+    closeSettings()
+end)
+
+menuToggleBtn.MouseButton1Click:Connect(function()
+    setMenuVisible(not State.guiVisible)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    setMenuVisible(false)
+end)
+
+settingsOpenBtn.MouseButton1Click:Connect(function()
+    openSettings()
+end)
+
+updateActionButtons()
+updateBindButtons()
 
 local function updateSpeedSlider(value)
     State.targetWalkSpeed = math.clamp(math.floor(value), Config.MinWalkSpeed, Config.MaxWalkSpeed)
@@ -392,17 +577,27 @@ end))
 
 -- Hotkeys
 track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if rebindTarget then
+        if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+            Hotkeys[rebindTarget] = input.KeyCode
+            rebindTarget = nil
+            rebindButton = nil
+            updateBindButtons()
+            updateActionButtons()
+        end
+        return
+    end
+
     if gameProcessed then return end
 
-    if input.KeyCode == Config.Hotkeys.ToggleGUI then
-        State.guiVisible = not State.guiVisible
-        mainFrame.Visible = State.guiVisible
-    elseif input.KeyCode == Config.Hotkeys.Fly then
+    if input.KeyCode == Hotkeys.ToggleGUI then
+        setMenuVisible(not State.guiVisible)
+    elseif input.KeyCode == Hotkeys.Fly then
         setFly(not State.flyEnabled)
-        flyBtn.Text = State.flyEnabled and "Fly: ВКЛ  [F]" or "Fly: ВЫКЛ  [F]"
-    elseif input.KeyCode == Config.Hotkeys.Noclip then
+        updateActionButtons()
+    elseif input.KeyCode == Hotkeys.Noclip then
         setNoclip(not State.noclipEnabled)
-        noclipBtn.Text = State.noclipEnabled and "Noclip: ВКЛ  [N]" or "Noclip: ВЫКЛ  [N]"
+        updateActionButtons()
     end
 end))
 
@@ -437,4 +632,4 @@ track(UserInputService.InputChanged:Connect(function(input)
     )
 end))
 
-print("[Speed Script] Загружен. RightShift — скрыть GUI.")
+print("[Speed Script] Загружен. Кнопка слева или " .. keyLabel(Hotkeys.ToggleGUI) .. " — меню.")
