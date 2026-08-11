@@ -1,16 +1,16 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.8
+    Version: 2.9
 ]]
 
-local SCRIPT_VERSION = "2.8"
+local SCRIPT_VERSION = "2.9"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
     DefaultWalkSpeed = 50,
     MinWalkSpeed = 16,
-    MaxWalkSpeed = 200,
+    MaxWalkSpeed = 1000,
     DefaultCPS = 10,
     MinCPS = 1,
     MaxCPS = 30,
