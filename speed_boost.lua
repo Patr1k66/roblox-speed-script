@@ -32,6 +32,15 @@ local Hotkeys = {
     PickClickPos = Config.Hotkeys.PickClickPos,
 }
 
+local bindNames = { "ToggleGUI", "Fly", "Noclip", "AutoClick", "PickClickPos" }
+local bindLabels = {
+    ToggleGUI = "Меню",
+    Fly = "Fly",
+    Noclip = "Noclip",
+    AutoClick = "AutoClick",
+    PickClickPos = "Pick spot",
+}
+
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -527,7 +536,9 @@ end
 
 local function updateBindButtons()
     for name, btn in pairs(bindButtons) do
-        btn.Text = string.format("%s: [%s]", bindLabels[name], keyLabel(Hotkeys[name]))
+        local label = bindLabels[name] or name
+        local hotkey = Hotkeys[name] or Config.Hotkeys[name]
+        btn.Text = string.format("%s: [%s]", label, keyLabel(hotkey))
         btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     end
 end
