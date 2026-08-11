@@ -1,17 +1,16 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.7
+    Version: 2.8
 ]]
 
-local SCRIPT_VERSION = "2.7"
+local SCRIPT_VERSION = "2.8"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
     DefaultWalkSpeed = 50,
     MinWalkSpeed = 16,
     MaxWalkSpeed = 200,
-    FlySpeed = 50,
     DefaultCPS = 10,
     MinCPS = 1,
     MaxCPS = 30,
@@ -175,6 +174,10 @@ track(RunService.Stepped:Connect(function()
 end))
 
 -- Fly
+local function getFlySpeed()
+    return State.targetWalkSpeed
+end
+
 local function setFly(enabled)
     State.flyEnabled = enabled
 
@@ -225,7 +228,7 @@ track(RunService.RenderStepped:Connect(function()
     end
 
     if moveDirection.Magnitude > 0 then
-        moveDirection = moveDirection.Unit * Config.FlySpeed
+        moveDirection = moveDirection.Unit * getFlySpeed()
     end
 
     flyBodyVelocity.Velocity = moveDirection
@@ -716,7 +719,7 @@ speedLabel.Font = Enum.Font.Gotham
 speedLabel.TextSize = 13
 speedLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
 speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-speedLabel.Text = "WalkSpeed: " .. Config.DefaultWalkSpeed
+speedLabel.Text = "Run + Fly: " .. Config.DefaultWalkSpeed
 speedLabel.Parent = mainFrame
 
 local speedSlider = Instance.new("TextButton")
