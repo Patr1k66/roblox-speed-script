@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.4
+    Version: 2.5
 ]]
 
-local SCRIPT_VERSION = "2.4"
+local SCRIPT_VERSION = "2.5"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
@@ -451,15 +451,17 @@ settingsFrame.Active = true
 settingsFrame.Parent = screenGui
 addCorner(settingsFrame, 8)
 
-local title = Instance.new("TextLabel")
+local title = Instance.new("TextButton")
 title.Size = UDim2.new(1, -80, 0, 32)
 title.Position = UDim2.new(0, 8, 0, 8)
 title.BackgroundTransparency = 1
+title.BorderSizePixel = 0
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = "patr1k cheats"
+title.AutoButtonColor = false
 title.Parent = mainFrame
 
 local closeBtn = Instance.new("TextButton")
@@ -734,6 +736,8 @@ sliderKnob.ZIndex = 2
 sliderKnob.Parent = speedSlider
 addCorner(sliderKnob, 7)
 
+speedSlider.ZIndex = 5
+
 speedToggleBtn = makeButton(mainFrame, "Speed: ВКЛ", 118, function() end)
 
 flyBtn = makeButton(mainFrame, "Fly: ВЫКЛ", 158, function()
@@ -805,6 +809,8 @@ cpsKnob.ZIndex = 2
 cpsKnob.Parent = cpsSlider
 addCorner(cpsKnob, 6)
 
+cpsSlider.ZIndex = 5
+
 hintLabel = Instance.new("TextLabel")
 hintLabel.Size = UDim2.new(1, -16, 0, 36)
 hintLabel.Position = UDim2.new(0, 8, 0, 372)
@@ -817,15 +823,17 @@ hintLabel.TextWrapped = true
 hintLabel.Parent = mainFrame
 
 -- Settings panel
-local settingsTitle = Instance.new("TextLabel")
+local settingsTitle = Instance.new("TextButton")
 settingsTitle.Size = UDim2.new(1, -16, 0, 32)
 settingsTitle.Position = UDim2.new(0, 8, 0, 8)
 settingsTitle.BackgroundTransparency = 1
+settingsTitle.BorderSizePixel = 0
 settingsTitle.Font = Enum.Font.GothamBold
 settingsTitle.TextSize = 16
 settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
 settingsTitle.Text = "Настройки биндов"
+settingsTitle.AutoButtonColor = false
 settingsTitle.Parent = settingsFrame
 
 local settingsHint = Instance.new("TextLabel")
@@ -875,6 +883,21 @@ updateActionButtons()
 updateBindButtons()
 updateClickPosLabel()
 
+local pointer = {
+    menuDrag = false,
+    iconDrag = false,
+    speedDrag = false,
+    cpsDrag = false,
+    dragStart = nil,
+    menuStartPos = nil,
+    iconStartPos = nil,
+    iconMoved = false,
+}
+
+local function getMouseLocation()
+    return UserInputService:GetMouseLocation()
+end
+
 local function updateCpsSlider(value)
     State.autoClickCPS = math.clamp(math.floor(value), Config.MinCPS, Config.MaxCPS)
     cpsLabel.Text = "CPS: " .. State.autoClickCPS
@@ -882,42 +905,6 @@ local function updateCpsSlider(value)
     cpsFill.Size = UDim2.new(ratio, 0, 1, 0)
     cpsKnob.Position = UDim2.new(ratio, 0, 0.5, 0)
 end
-
-local draggingCpsSlider = false
-
-local function setCpsFromScreenX(screenX)
-    local relative = math.clamp(
-        (screenX - cpsSlider.AbsolutePosition.X) / cpsSlider.AbsoluteSize.X,
-        0,
-        1
-    )
-    local value = Config.MinCPS + relative * (Config.MaxCPS - Config.MinCPS)
-    updateCpsSlider(value)
-end
-
-cpsSlider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingCpsSlider = true
-        setCpsFromScreenX(input.Position.X)
-    end
-end)
-
-track(UserInputService.InputChanged:Connect(function(input)
-    if draggingCpsSlider and (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
-        setCpsFromScreenX(input.Position.X)
-    end
-end))
-
-track(UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingCpsSlider = false
-    end
-end))
-
-updateCpsSlider(Config.DefaultCPS)
 
 local function updateSpeedSlider(value)
     State.targetWalkSpeed = math.clamp(math.floor(value), Config.MinWalkSpeed, Config.MaxWalkSpeed)
@@ -927,40 +914,65 @@ local function updateSpeedSlider(value)
     sliderKnob.Position = UDim2.new(ratio, 0, 0.5, 0)
 end
 
-local draggingSlider = false
+local function setSliderFromScreenX(slider, minValue, maxValue, updater, screenX)
+    if not slider or slider.AbsoluteSize.X <= 0 then
+        return
+    end
 
-local function setSliderFromScreenX(screenX)
     local relative = math.clamp(
-        (screenX - speedSlider.AbsolutePosition.X) / speedSlider.AbsoluteSize.X,
+        (screenX - slider.AbsolutePosition.X) / slider.AbsoluteSize.X,
         0,
         1
     )
-    local value = Config.MinWalkSpeed + relative * (Config.MaxWalkSpeed - Config.MinWalkSpeed)
-    updateSpeedSlider(value)
+    updater(minValue + relative * (maxValue - minValue))
 end
 
-speedSlider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingSlider = true
-        setSliderFromScreenX(input.Position.X)
+local function startMenuDrag()
+    pointer.menuDrag = true
+    pointer.dragStart = getMouseLocation()
+    pointer.menuStartPos = mainFrame.Position
+end
+
+local function beginMenuDrag(input)
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
     end
+    startMenuDrag()
+end
+
+local function beginIconDrag(input)
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+
+    pointer.iconDrag = true
+    pointer.iconMoved = false
+    pointer.dragStart = getMouseLocation()
+    pointer.iconStartPos = menuToggleBtn.Position
+end
+
+speedSlider.MouseButton1Down:Connect(function()
+    pointer.speedDrag = true
+    setSliderFromScreenX(speedSlider, Config.MinWalkSpeed, Config.MaxWalkSpeed, updateSpeedSlider, getMouseLocation().X)
 end)
 
-track(UserInputService.InputChanged:Connect(function(input)
-    if not draggingSlider then return end
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-        setSliderFromScreenX(input.Position.X)
-    end
-end))
+cpsSlider.MouseButton1Down:Connect(function()
+    pointer.cpsDrag = true
+    setSliderFromScreenX(cpsSlider, Config.MinCPS, Config.MaxCPS, updateCpsSlider, getMouseLocation().X)
+end)
 
-track(UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingSlider = false
+menuToggleBtn.MouseButton1Click:Connect(function()
+    if pointer.iconMoved then
+        pointer.iconMoved = false
+        return
     end
-end))
+    setMenuVisible(not State.guiVisible)
+end)
+
+updateCpsSlider(Config.DefaultCPS)
+updateSpeedSlider(Config.DefaultWalkSpeed)
 
 speedToggleBtn.MouseButton1Click:Connect(function()
     State.speedEnabled = not State.speedEnabled
@@ -1038,84 +1050,35 @@ track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end))
 
 -- Drag GUI (menu + settings + icon)
-local draggingGui = false
-local draggingIcon = false
-local dragStart = nil
-local startPos = nil
-local iconMoved = false
-
 local dragBar = Instance.new("Frame")
 dragBar.Name = "DragBar"
-dragBar.Size = UDim2.new(1, -76, 0, 40)
+dragBar.Size = UDim2.new(1, -76, 0, 44)
 dragBar.Position = UDim2.new(0, 0, 0, 0)
 dragBar.BackgroundTransparency = 1
 dragBar.Active = true
+dragBar.ZIndex = 20
 dragBar.Parent = mainFrame
 
 local settingsDragBar = Instance.new("Frame")
 settingsDragBar.Name = "DragBar"
-settingsDragBar.Size = UDim2.new(1, -16, 0, 40)
+settingsDragBar.Size = UDim2.new(1, -16, 0, 44)
 settingsDragBar.Position = UDim2.new(0, 0, 0, 0)
 settingsDragBar.BackgroundTransparency = 1
 settingsDragBar.Active = true
+settingsDragBar.ZIndex = 20
 settingsDragBar.Parent = settingsFrame
 
-local function beginMenuDrag(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingGui = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-    end
-end
+title.ZIndex = 21
+settingsTitle.ZIndex = 21
+closeBtn.ZIndex = 30
+settingsOpenBtn.ZIndex = 30
 
-dragBar.InputBegan:Connect(function(input)
-    beginMenuDrag(input)
-end)
+dragBar.InputBegan:Connect(beginMenuDrag)
+title.MouseButton1Down:Connect(startMenuDrag)
+settingsDragBar.InputBegan:Connect(beginMenuDrag)
+settingsTitle.MouseButton1Down:Connect(startMenuDrag)
 
-title.InputBegan:Connect(function(input)
-    beginMenuDrag(input)
-end)
-
-settingsDragBar.InputBegan:Connect(function(input)
-    beginMenuDrag(input)
-end)
-
-settingsTitle.InputBegan:Connect(function(input)
-    beginMenuDrag(input)
-end)
-
-local function endMenuDrag(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingGui = false
-    end
-end
-
-dragBar.InputEnded:Connect(endMenuDrag)
-title.InputEnded:Connect(endMenuDrag)
-settingsDragBar.InputEnded:Connect(endMenuDrag)
-settingsTitle.InputEnded:Connect(endMenuDrag)
-
-menuToggleBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingIcon = true
-        iconMoved = false
-        dragStart = input.Position
-        startPos = menuToggleBtn.Position
-    end
-end)
-
-menuToggleBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingIcon = false
-        if not iconMoved then
-            setMenuVisible(not State.guiVisible)
-        end
-    end
-end)
+menuToggleBtn.InputBegan:Connect(beginIconDrag)
 
 track(UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.MouseMovement
@@ -1123,34 +1086,47 @@ track(UserInputService.InputChanged:Connect(function(input)
         return
     end
 
-    if draggingGui and dragStart and startPos then
-        local delta = input.Position - dragStart
+    local mouse = getMouseLocation()
+
+    if pointer.speedDrag then
+        setSliderFromScreenX(speedSlider, Config.MinWalkSpeed, Config.MaxWalkSpeed, updateSpeedSlider, mouse.X)
+    elseif pointer.cpsDrag then
+        setSliderFromScreenX(cpsSlider, Config.MinCPS, Config.MaxCPS, updateCpsSlider, mouse.X)
+    elseif pointer.menuDrag and pointer.dragStart and pointer.menuStartPos then
+        local delta = mouse - pointer.dragStart
         setMenuPosition(UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            pointer.menuStartPos.X.Scale,
+            pointer.menuStartPos.X.Offset + delta.X,
+            pointer.menuStartPos.Y.Scale,
+            pointer.menuStartPos.Y.Offset + delta.Y
         ))
-    elseif draggingIcon and dragStart and startPos then
-        local delta = input.Position - dragStart
-        if delta.Magnitude > 5 then
-            iconMoved = true
+    elseif pointer.iconDrag and pointer.dragStart and pointer.iconStartPos then
+        local delta = mouse - pointer.dragStart
+        if delta.Magnitude > 6 then
+            pointer.iconMoved = true
         end
         menuToggleBtn.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            pointer.iconStartPos.X.Scale,
+            pointer.iconStartPos.X.Offset + delta.X,
+            pointer.iconStartPos.Y.Scale,
+            pointer.iconStartPos.Y.Offset + delta.Y
         )
     end
 end))
 
 track(UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        draggingGui = false
-        draggingIcon = false
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
     end
+
+    pointer.menuDrag = false
+    pointer.iconDrag = false
+    pointer.speedDrag = false
+    pointer.cpsDrag = false
+    pointer.dragStart = nil
+    pointer.menuStartPos = nil
+    pointer.iconStartPos = nil
 end))
 
 print("[patr1k cheats v" .. SCRIPT_VERSION .. "] Loaded. Drag Patrick icon or menu title.")
