@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-
-    Работает в играх БЕЗ серверного античита.
-    В популярных играх скорость может сбрасываться или давать kick.
+    Version: 2.1
 ]]
+
+local SCRIPT_VERSION = "2.1"
 
 local Config = {
     DefaultWalkSpeed = 50,
@@ -59,11 +59,24 @@ local function getParentGui()
         return gethui()
     end
     if syn and syn.protect_gui then
-        local coreGui = game:GetService("CoreGui")
-        return coreGui
+        return game:GetService("CoreGui")
     end
     return LocalPlayer:WaitForChild("PlayerGui")
 end
+
+local function cleanupPrevious()
+    if getgenv and getgenv().SpeedBoostCleanup then
+        pcall(getgenv().SpeedBoostCleanup)
+    end
+
+    local parent = getParentGui()
+    local oldGui = parent:FindFirstChild("SpeedBoostGUI")
+    if oldGui then
+        oldGui:Destroy()
+    end
+end
+
+cleanupPrevious()
 
 local function disconnectAll()
     for _, conn in connections do
@@ -218,7 +231,12 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SpeedBoostGUI"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 999999
 screenGui.Parent = getParentGui()
+
+if syn and syn.protect_gui then
+    syn.protect_gui(screenGui)
+end
 
 local function addCorner(parent, radius)
     local c = Instance.new("UICorner")
@@ -230,22 +248,22 @@ end
 -- Floating button — always visible, opens/closes menu
 local menuToggleBtn = Instance.new("TextButton")
 menuToggleBtn.Name = "MenuToggle"
-menuToggleBtn.Size = UDim2.new(0, 44, 0, 44)
-menuToggleBtn.Position = UDim2.new(0, 20, 0.5, -160)
+menuToggleBtn.Size = UDim2.new(0, 48, 0, 48)
+menuToggleBtn.Position = UDim2.new(0, 12, 0.5, -24)
 menuToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 110, 220)
 menuToggleBtn.BorderSizePixel = 0
 menuToggleBtn.Font = Enum.Font.GothamBold
-menuToggleBtn.TextSize = 18
+menuToggleBtn.TextSize = 20
 menuToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-menuToggleBtn.Text = "X"
-menuToggleBtn.ZIndex = 10
+menuToggleBtn.Text = "MENU"
+menuToggleBtn.ZIndex = 100
 menuToggleBtn.Parent = screenGui
 addCorner(menuToggleBtn, 22)
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
 mainFrame.Size = UDim2.new(0, 260, 0, 318)
-mainFrame.Position = UDim2.new(0, 72, 0.5, -159)
+mainFrame.Position = UDim2.new(0, 68, 0.5, -159)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -271,7 +289,7 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "Speed Script"
+title.Text = "Speed Script v" .. SCRIPT_VERSION
 title.Parent = mainFrame
 
 local closeBtn = Instance.new("TextButton")
@@ -294,7 +312,7 @@ settingsOpenBtn.BorderSizePixel = 0
 settingsOpenBtn.Font = Enum.Font.GothamBold
 settingsOpenBtn.TextSize = 14
 settingsOpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-settingsOpenBtn.Text = "⚙"
+settingsOpenBtn.Text = "CFG"
 settingsOpenBtn.Parent = mainFrame
 addCorner(settingsOpenBtn, 6)
 
@@ -331,7 +349,7 @@ end
 local function updateActionButtons()
     flyBtn.Text = string.format("Fly: %s  [%s]", State.flyEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Fly))
     noclipBtn.Text = string.format("Noclip: %s  [%s]", State.noclipEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Noclip))
-    hintLabel.Text = string.format("%s — меню | ⚙ — настройки биндов\nРаботает не во всех играх", keyLabel(Hotkeys.ToggleGUI))
+    hintLabel.Text = string.format("%s - menu | CFG - keybinds", keyLabel(Hotkeys.ToggleGUI))
 end
 
 local function updateBindButtons()
@@ -348,7 +366,7 @@ local function setMenuVisible(visible)
         settingsFrame.Visible = false
         State.settingsOpen = false
     end
-    menuToggleBtn.Text = visible and "X" or ">"
+    menuToggleBtn.Text = visible and "CLOSE" or "MENU"
     menuToggleBtn.BackgroundColor3 = visible
         and Color3.fromRGB(180, 60, 60)
         or Color3.fromRGB(50, 110, 220)
@@ -632,4 +650,14 @@ track(UserInputService.InputChanged:Connect(function(input)
     )
 end))
 
-print("[Speed Script] Загружен. Кнопка слева или " .. keyLabel(Hotkeys.ToggleGUI) .. " — меню.")
+print("[Speed Script v" .. SCRIPT_VERSION .. "] Loaded. Blue MENU button on the left.")
+
+if getgenv then
+    getgenv().SpeedBoostCleanup = function()
+        disconnectAll()
+        cleanupFly()
+        if screenGui and screenGui.Parent then
+            screenGui:Destroy()
+        end
+    end
+end
