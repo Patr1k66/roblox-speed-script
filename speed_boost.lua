@@ -1,10 +1,11 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.1
+    Version: 2.2
 ]]
 
-local SCRIPT_VERSION = "2.1"
+local SCRIPT_VERSION = "2.2"
+local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
     DefaultWalkSpeed = 50,
@@ -227,6 +228,33 @@ local function keyLabel(keyCode)
     return keyCode.Name
 end
 
+local function loadMenuIcon(url)
+    if getcustomasset then
+        local ok, asset = pcall(getcustomasset, url)
+        if ok and asset and asset ~= "" then
+            return asset
+        end
+    end
+
+    local fileName = "patr1k_cheats_icon.png"
+    local imageData = game:HttpGet(url)
+
+    if syn and syn.writefile then
+        pcall(syn.writefile, fileName, imageData)
+    elseif writefile then
+        pcall(writefile, fileName, imageData)
+    end
+
+    if getcustomasset then
+        local ok, asset = pcall(getcustomasset, fileName)
+        if ok and asset and asset ~= "" then
+            return asset
+        end
+    end
+
+    return ""
+end
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SpeedBoostGUI"
 screenGui.ResetOnSpawn = false
@@ -245,20 +273,24 @@ local function addCorner(parent, radius)
     return c
 end
 
--- Floating button — always visible, opens/closes menu
-local menuToggleBtn = Instance.new("TextButton")
+-- Floating icon — always visible, opens/closes menu, draggable
+local menuToggleBtn = Instance.new("ImageButton")
 menuToggleBtn.Name = "MenuToggle"
-menuToggleBtn.Size = UDim2.new(0, 48, 0, 48)
-menuToggleBtn.Position = UDim2.new(0, 12, 0.5, -24)
-menuToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 110, 220)
+menuToggleBtn.Size = UDim2.new(0, 56, 0, 56)
+menuToggleBtn.Position = UDim2.new(0, 12, 0.5, -28)
+menuToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+menuToggleBtn.BackgroundTransparency = 0.2
 menuToggleBtn.BorderSizePixel = 0
-menuToggleBtn.Font = Enum.Font.GothamBold
-menuToggleBtn.TextSize = 20
-menuToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-menuToggleBtn.Text = "MENU"
+menuToggleBtn.Image = loadMenuIcon(MENU_ICON_URL)
+menuToggleBtn.ScaleType = Enum.ScaleType.Crop
 menuToggleBtn.ZIndex = 100
 menuToggleBtn.Parent = screenGui
-addCorner(menuToggleBtn, 22)
+addCorner(menuToggleBtn, 28)
+
+local menuIconStroke = Instance.new("UIStroke")
+menuIconStroke.Color = Color3.fromRGB(80, 160, 255)
+menuIconStroke.Thickness = 2
+menuIconStroke.Parent = menuToggleBtn
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
@@ -289,7 +321,7 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "Speed Script v" .. SCRIPT_VERSION
+title.Text = "patr1k cheats"
 title.Parent = mainFrame
 
 local closeBtn = Instance.new("TextButton")
@@ -359,6 +391,11 @@ local function updateBindButtons()
     end
 end
 
+local function setMenuPosition(position)
+    mainFrame.Position = position
+    settingsFrame.Position = position
+end
+
 local function setMenuVisible(visible)
     State.guiVisible = visible
     mainFrame.Visible = visible
@@ -366,10 +403,9 @@ local function setMenuVisible(visible)
         settingsFrame.Visible = false
         State.settingsOpen = false
     end
-    menuToggleBtn.Text = visible and "CLOSE" or "MENU"
-    menuToggleBtn.BackgroundColor3 = visible
-        and Color3.fromRGB(180, 60, 60)
-        or Color3.fromRGB(50, 110, 220)
+    menuIconStroke.Color = visible
+        and Color3.fromRGB(255, 90, 90)
+        or Color3.fromRGB(80, 160, 255)
 end
 
 local function openSettings()
@@ -413,16 +449,19 @@ speedLabel.Text = "WalkSpeed: " .. Config.DefaultWalkSpeed
 speedLabel.Parent = mainFrame
 
 local speedSlider = Instance.new("TextButton")
-speedSlider.Size = UDim2.new(1, -16, 0, 8)
-speedSlider.Position = UDim2.new(0, 8, 0, 92)
+speedSlider.Name = "SpeedSlider"
+speedSlider.Size = UDim2.new(1, -16, 0, 22)
+speedSlider.Position = UDim2.new(0, 8, 0, 88)
 speedSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
 speedSlider.BorderSizePixel = 0
 speedSlider.Text = ""
 speedSlider.AutoButtonColor = false
+speedSlider.ClipsDescendants = true
 speedSlider.Parent = mainFrame
-addCorner(speedSlider, 4)
+addCorner(speedSlider, 11)
 
 local sliderFill = Instance.new("Frame")
+sliderFill.Name = "Fill"
 sliderFill.Size = UDim2.new(
     (Config.DefaultWalkSpeed - Config.MinWalkSpeed) / (Config.MaxWalkSpeed - Config.MinWalkSpeed),
     0,
@@ -431,24 +470,37 @@ sliderFill.Size = UDim2.new(
 )
 sliderFill.BackgroundColor3 = Color3.fromRGB(80, 160, 255)
 sliderFill.BorderSizePixel = 0
+sliderFill.Active = false
 sliderFill.Parent = speedSlider
-addCorner(sliderFill, 4)
+addCorner(sliderFill, 11)
 
-speedToggleBtn = makeButton(mainFrame, "Speed: ВКЛ", 108, function() end)
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Name = "Knob"
+sliderKnob.Size = UDim2.new(0, 14, 0, 14)
+sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+sliderKnob.Position = UDim2.new(sliderFill.Size.X.Scale, 0, 0.5, 0)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderKnob.BorderSizePixel = 0
+sliderKnob.Active = false
+sliderKnob.ZIndex = 2
+sliderKnob.Parent = speedSlider
+addCorner(sliderKnob, 7)
 
-flyBtn = makeButton(mainFrame, "Fly: ВЫКЛ", 148, function()
+speedToggleBtn = makeButton(mainFrame, "Speed: ВКЛ", 118, function() end)
+
+flyBtn = makeButton(mainFrame, "Fly: ВЫКЛ", 158, function()
     setFly(not State.flyEnabled)
     updateActionButtons()
 end)
 
-noclipBtn = makeButton(mainFrame, "Noclip: ВЫКЛ", 188, function()
+noclipBtn = makeButton(mainFrame, "Noclip: ВЫКЛ", 198, function()
     setNoclip(not State.noclipEnabled)
     updateActionButtons()
 end)
 
 hintLabel = Instance.new("TextLabel")
 hintLabel.Size = UDim2.new(1, -16, 0, 48)
-hintLabel.Position = UDim2.new(0, 8, 0, 232)
+hintLabel.Position = UDim2.new(0, 8, 0, 242)
 hintLabel.BackgroundTransparency = 1
 hintLabel.Font = Enum.Font.Gotham
 hintLabel.TextSize = 11
@@ -509,10 +561,6 @@ makeButton(settingsFrame, "← Назад", 248, function()
     closeSettings()
 end)
 
-menuToggleBtn.MouseButton1Click:Connect(function()
-    setMenuVisible(not State.guiVisible)
-end)
-
 closeBtn.MouseButton1Click:Connect(function()
     setMenuVisible(false)
 end)
@@ -527,38 +575,44 @@ updateBindButtons()
 local function updateSpeedSlider(value)
     State.targetWalkSpeed = math.clamp(math.floor(value), Config.MinWalkSpeed, Config.MaxWalkSpeed)
     speedLabel.Text = "WalkSpeed: " .. State.targetWalkSpeed
-    sliderFill.Size = UDim2.new(
-        (State.targetWalkSpeed - Config.MinWalkSpeed) / (Config.MaxWalkSpeed - Config.MinWalkSpeed),
-        0,
-        1,
-        0
-    )
+    local ratio = (State.targetWalkSpeed - Config.MinWalkSpeed) / (Config.MaxWalkSpeed - Config.MinWalkSpeed)
+    sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+    sliderKnob.Position = UDim2.new(ratio, 0, 0.5, 0)
 end
 
 local draggingSlider = false
 
-speedSlider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingSlider = true
-    end
-end)
-
-speedSlider.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingSlider = false
-    end
-end)
-
-track(UserInputService.InputChanged:Connect(function(input)
-    if not draggingSlider or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-
+local function setSliderFromScreenX(screenX)
     local relative = math.clamp(
-        (input.Position.X - speedSlider.AbsolutePosition.X) / speedSlider.AbsoluteSize.X,
+        (screenX - speedSlider.AbsolutePosition.X) / speedSlider.AbsoluteSize.X,
         0,
         1
     )
     local value = Config.MinWalkSpeed + relative * (Config.MaxWalkSpeed - Config.MinWalkSpeed)
     updateSpeedSlider(value)
+end
+
+speedSlider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingSlider = true
+        setSliderFromScreenX(input.Position.X)
+    end
+end)
+
+track(UserInputService.InputChanged:Connect(function(input)
+    if not draggingSlider then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        setSliderFromScreenX(input.Position.X)
+    end
+end))
+
+track(UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingSlider = false
+    end
 end))
 
 speedToggleBtn.MouseButton1Click:Connect(function()
@@ -619,38 +673,123 @@ track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end))
 
--- Drag GUI
+-- Drag GUI (menu + settings + icon)
 local draggingGui = false
+local draggingIcon = false
 local dragStart = nil
 local startPos = nil
+local iconMoved = false
 
-title.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+local dragBar = Instance.new("Frame")
+dragBar.Name = "DragBar"
+dragBar.Size = UDim2.new(1, -76, 0, 40)
+dragBar.Position = UDim2.new(0, 0, 0, 0)
+dragBar.BackgroundTransparency = 1
+dragBar.Active = true
+dragBar.Parent = mainFrame
+
+local settingsDragBar = Instance.new("Frame")
+settingsDragBar.Name = "DragBar"
+settingsDragBar.Size = UDim2.new(1, -16, 0, 40)
+settingsDragBar.Position = UDim2.new(0, 0, 0, 0)
+settingsDragBar.BackgroundTransparency = 1
+settingsDragBar.Active = true
+settingsDragBar.Parent = settingsFrame
+
+local function beginMenuDrag(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
         draggingGui = true
         dragStart = input.Position
         startPos = mainFrame.Position
     end
+end
+
+dragBar.InputBegan:Connect(function(input)
+    beginMenuDrag(input)
 end)
 
-title.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+title.InputBegan:Connect(function(input)
+    beginMenuDrag(input)
+end)
+
+settingsDragBar.InputBegan:Connect(function(input)
+    beginMenuDrag(input)
+end)
+
+settingsTitle.InputBegan:Connect(function(input)
+    beginMenuDrag(input)
+end)
+
+local function endMenuDrag(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
         draggingGui = false
+    end
+end
+
+dragBar.InputEnded:Connect(endMenuDrag)
+title.InputEnded:Connect(endMenuDrag)
+settingsDragBar.InputEnded:Connect(endMenuDrag)
+settingsTitle.InputEnded:Connect(endMenuDrag)
+
+menuToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingIcon = true
+        iconMoved = false
+        dragStart = input.Position
+        startPos = menuToggleBtn.Position
+    end
+end)
+
+menuToggleBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingIcon = false
+        if not iconMoved then
+            setMenuVisible(not State.guiVisible)
+        end
     end
 end)
 
 track(UserInputService.InputChanged:Connect(function(input)
-    if not draggingGui or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
 
-    local delta = input.Position - dragStart
-    mainFrame.Position = UDim2.new(
-        startPos.X.Scale,
-        startPos.X.Offset + delta.X,
-        startPos.Y.Scale,
-        startPos.Y.Offset + delta.Y
-    )
+    if draggingGui and dragStart and startPos then
+        local delta = input.Position - dragStart
+        setMenuPosition(UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        ))
+    elseif draggingIcon and dragStart and startPos then
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 5 then
+            iconMoved = true
+        end
+        menuToggleBtn.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
 end))
 
-print("[Speed Script v" .. SCRIPT_VERSION .. "] Loaded. Blue MENU button on the left.")
+track(UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingGui = false
+        draggingIcon = false
+    end
+end))
+
+print("[patr1k cheats v" .. SCRIPT_VERSION .. "] Loaded. Drag Patrick icon or menu title.")
 
 if getgenv then
     getgenv().SpeedBoostCleanup = function()
