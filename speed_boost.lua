@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.5
+    Version: 2.7
 ]]
 
-local SCRIPT_VERSION = "2.5"
+local SCRIPT_VERSION = "2.7"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
@@ -47,6 +47,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -247,6 +248,22 @@ local function setNoclip(enabled)
 end
 
 -- Auto Clicker
+local function getGuiInset()
+    return GuiService:GetGuiInset()
+end
+
+-- Screen/window coords -> ScreenGui coords (below top bar)
+local function toGuiMouse(screenPos)
+    local inset = getGuiInset()
+    return Vector2.new(screenPos.X - inset.X, screenPos.Y - inset.Y)
+end
+
+-- ScreenGui coords -> window coords for VirtualInputManager
+local function toScreenMouse(guiPos)
+    local inset = getGuiInset()
+    return Vector2.new(guiPos.X + inset.X, guiPos.Y + inset.Y)
+end
+
 local function updateClickMarker()
     if not clickMarker then return end
     clickMarker.Position = UDim2.fromOffset(State.clickPosition.X, State.clickPosition.Y)
@@ -262,7 +279,10 @@ local function updateClickPosLabel()
     )
 end
 
-local function performVirtualClick(x, y)
+local function performVirtualClick(guiX, guiY)
+    local screenPos = toScreenMouse(Vector2.new(guiX, guiY))
+    local x, y = screenPos.X, screenPos.Y
+
     local ok = pcall(function()
         VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
         VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
@@ -427,8 +447,7 @@ pickOverlay.AutoButtonColor = false
 pickOverlay.Parent = screenGui
 
 pickOverlay.MouseButton1Click:Connect(function()
-    local mousePos = UserInputService:GetMouseLocation()
-    setClickPosition(mousePos)
+    setClickPosition(toGuiMouse(UserInputService:GetMouseLocation()))
     cancelPickClickPosition()
 end)
 
@@ -572,15 +591,6 @@ local function closeSettings()
     settingsFrame.Visible = false
     mainFrame.Visible = State.guiVisible
 end
-
-local bindNames = { "ToggleGUI", "Fly", "Noclip", "AutoClick", "PickClickPos" }
-local bindLabels = {
-    ToggleGUI = "Меню",
-    Fly = "Fly",
-    Noclip = "Noclip",
-    AutoClick = "AutoClick",
-    PickClickPos = "Pick spot",
-}
 
 local REBIND_ACTION = "Patr1kCheatsRebind"
 
