@@ -932,7 +932,7 @@ end
 
 local function updateSpeedSlider(value)
     State.targetWalkSpeed = math.clamp(math.floor(value), Config.MinWalkSpeed, Config.MaxWalkSpeed)
-    speedLabel.Text = "WalkSpeed: " .. State.targetWalkSpeed
+    speedLabel.Text = "Run + Fly: " .. State.targetWalkSpeed
     local ratio = (State.targetWalkSpeed - Config.MinWalkSpeed) / (Config.MaxWalkSpeed - Config.MinWalkSpeed)
     sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
     sliderKnob.Position = UDim2.new(ratio, 0, 0.5, 0)
