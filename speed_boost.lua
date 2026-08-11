@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.2
+    Version: 2.3
 ]]
 
-local SCRIPT_VERSION = "2.2"
+local SCRIPT_VERSION = "2.3"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
@@ -29,6 +29,7 @@ local Hotkeys = {
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -359,7 +360,7 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Text = "Статус: ..."
 statusLabel.Parent = mainFrame
 
-local flyBtn, noclipBtn, speedToggleBtn, hintLabel
+local flyBtn, noclipBtn, speedToggleBtn, hintLabel, settingsHint
 local bindButtons = {}
 
 local function makeButton(parent, text, yPos, callback)
@@ -421,20 +422,127 @@ local function closeSettings()
     mainFrame.Visible = State.guiVisible
 end
 
+local bindNames = { "ToggleGUI", "Fly", "Noclip" }
+local bindLabels = {
+    ToggleGUI = "Меню",
+    Fly = "Fly",
+    Noclip = "Noclip",
+}
+
+local REBIND_ACTION = "Patr1kCheatsRebind"
+
+local function stopRebindCapture()
+    pcall(function()
+        ContextActionService:UnbindAction(REBIND_ACTION)
+    end)
+end
+
 local function cancelRebind()
     rebindTarget = nil
     rebindButton = nil
+    stopRebindCapture()
     updateBindButtons()
+    if settingsHint then
+        settingsHint.Text = "Нажмите на бинд и нажмите новую клавишу"
+        settingsHint.TextColor3 = Color3.fromRGB(160, 160, 160)
+    end
 end
 
-local function startRebind(bindName, btn)
-    if rebindTarget then
-        cancelRebind()
+local function applyRebindKey(keyCode)
+    if not rebindTarget or not keyCode or keyCode == Enum.KeyCode.Unknown then
+        return false
     end
+
+    local blocked = {
+        Enum.KeyCode.Return,
+        Enum.KeyCode.Space,
+        Enum.KeyCode.Tab,
+    }
+    for _, code in blocked do
+        if keyCode == code then
+            return false
+        end
+    end
+
+    Hotkeys[rebindTarget] = keyCode
+    local savedName = rebindTarget
+    local savedLabel = bindLabels[savedName]
+    cancelRebind()
+    updateBindButtons()
+    updateActionButtons()
+
+    if settingsHint then
+        settingsHint.Text = string.format("Сохранено: %s = %s", savedLabel, keyLabel(keyCode))
+        settingsHint.TextColor3 = Color3.fromRGB(100, 220, 130)
+    end
+
+    return true
+end
+
+local function startRebindCapture(bindName, btn)
+    cancelRebind()
+
     rebindTarget = bindName
     rebindButton = btn
     btn.Text = "Нажмите клавишу..."
     btn.BackgroundColor3 = Color3.fromRGB(80, 120, 200)
+
+    if settingsHint then
+        settingsHint.Text = "Жду клавишу... Esc — отмена"
+        settingsHint.TextColor3 = Color3.fromRGB(255, 210, 100)
+    end
+
+    local function onRebindInput(_, state, input)
+        if state ~= Enum.UserInputState.Begin then
+            return Enum.ContextActionResult.Pass
+        end
+
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode == Enum.KeyCode.Escape then
+                cancelRebind()
+                return Enum.ContextActionResult.Sink
+            end
+
+            if applyRebindKey(input.KeyCode) then
+                return Enum.ContextActionResult.Sink
+            end
+        end
+
+        return Enum.ContextActionResult.Pass
+    end
+
+    task.defer(function()
+        if not rebindTarget then
+            return
+        end
+
+        stopRebindCapture()
+
+        local bound = pcall(function()
+            ContextActionService:BindActionAtPriority(
+                REBIND_ACTION,
+                onRebindInput,
+                false,
+                3000,
+                Enum.UserInputType.Keyboard
+            )
+        end)
+
+        if not bound then
+            pcall(function()
+                ContextActionService:BindAction(
+                    REBIND_ACTION,
+                    onRebindInput,
+                    false,
+                    Enum.UserInputType.Keyboard
+                )
+            end)
+        end
+    end)
+end
+
+local function startRebind(bindName, btn)
+    startRebindCapture(bindName, btn)
 end
 
 local speedLabel = Instance.new("TextLabel")
@@ -532,13 +640,6 @@ settingsHint.TextXAlignment = Enum.TextXAlignment.Left
 settingsHint.TextWrapped = true
 settingsHint.Text = "Нажмите на бинд и нажмите новую клавишу"
 settingsHint.Parent = settingsFrame
-
-local bindNames = { "ToggleGUI", "Fly", "Noclip" }
-local bindLabels = {
-    ToggleGUI = "Меню",
-    Fly = "Fly",
-    Noclip = "Noclip",
-}
 
 for i, bindName in ipairs(bindNames) do
     local btn = makeButton(settingsFrame, bindLabels[bindName] .. ": [...]", 88 + (i - 1) * 40, function()
@@ -650,17 +751,23 @@ end))
 -- Hotkeys
 track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if rebindTarget then
-        if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
-            Hotkeys[rebindTarget] = input.KeyCode
-            rebindTarget = nil
-            rebindButton = nil
-            updateBindButtons()
-            updateActionButtons()
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode == Enum.KeyCode.Escape then
+                cancelRebind()
+            else
+                applyRebindKey(input.KeyCode)
+            end
         end
         return
     end
 
-    if gameProcessed then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then
+        return
+    end
+
+    if gameProcessed then
+        return
+    end
 
     if input.KeyCode == Hotkeys.ToggleGUI then
         setMenuVisible(not State.guiVisible)
@@ -793,6 +900,7 @@ print("[patr1k cheats v" .. SCRIPT_VERSION .. "] Loaded. Drag Patrick icon or me
 
 if getgenv then
     getgenv().SpeedBoostCleanup = function()
+        cancelRebind()
         disconnectAll()
         cleanupFly()
         if screenGui and screenGui.Parent then
