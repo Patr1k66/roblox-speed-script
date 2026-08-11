@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.3
+    Version: 2.4
 ]]
 
-local SCRIPT_VERSION = "2.3"
+local SCRIPT_VERSION = "2.4"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
@@ -12,10 +12,15 @@ local Config = {
     MinWalkSpeed = 16,
     MaxWalkSpeed = 200,
     FlySpeed = 50,
+    DefaultCPS = 10,
+    MinCPS = 1,
+    MaxCPS = 30,
     Hotkeys = {
         Fly = Enum.KeyCode.F,
         Noclip = Enum.KeyCode.N,
         ToggleGUI = Enum.KeyCode.RightShift,
+        AutoClick = Enum.KeyCode.C,
+        PickClickPos = Enum.KeyCode.P,
     },
 }
 
@@ -23,6 +28,8 @@ local Hotkeys = {
     Fly = Config.Hotkeys.Fly,
     Noclip = Config.Hotkeys.Noclip,
     ToggleGUI = Config.Hotkeys.ToggleGUI,
+    AutoClick = Config.Hotkeys.AutoClick,
+    PickClickPos = Config.Hotkeys.PickClickPos,
 }
 
 -- Services
@@ -30,9 +37,12 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+
+local viewportSize = Camera and Camera.ViewportSize or Vector2.new(1280, 720)
 
 -- State
 local State = {
@@ -42,6 +52,10 @@ local State = {
     noclipEnabled = false,
     guiVisible = true,
     settingsOpen = false,
+    autoClickEnabled = false,
+    autoClickCPS = Config.DefaultCPS,
+    clickPosition = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2),
+    pickingClickPosition = false,
 }
 
 local rebindTarget = nil
@@ -54,6 +68,8 @@ local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 local connections = {}
 local flyBodyVelocity = nil
 local flyBodyGyro = nil
+local lastAutoClickTime = 0
+local clickMarker, pickOverlay, autoClickBtn, clickPosLabel, cpsLabel, cpsSlider, cpsFill, cpsKnob
 
 -- Executor compatibility: parent GUI to hidden UI
 local function getParentGui()
@@ -221,6 +237,88 @@ local function setNoclip(enabled)
     end
 end
 
+-- Auto Clicker
+local function updateClickMarker()
+    if not clickMarker then return end
+    clickMarker.Position = UDim2.fromOffset(State.clickPosition.X, State.clickPosition.Y)
+    clickMarker.Visible = not State.pickingClickPosition
+end
+
+local function updateClickPosLabel()
+    if not clickPosLabel then return end
+    clickPosLabel.Text = string.format(
+        "Click pos: %d, %d",
+        math.floor(State.clickPosition.X),
+        math.floor(State.clickPosition.Y)
+    )
+end
+
+local function performVirtualClick(x, y)
+    local ok = pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    end)
+
+    if not ok and mouse1click then
+        pcall(mouse1click)
+    end
+end
+
+local function setAutoClick(enabled)
+    State.autoClickEnabled = enabled
+    if clickMarker then
+        clickMarker.BackgroundColor3 = enabled
+            and Color3.fromRGB(255, 60, 60)
+            or Color3.fromRGB(255, 120, 120)
+    end
+end
+
+local function toggleAutoClick()
+    setAutoClick(not State.autoClickEnabled)
+    updateActionButtons()
+end
+
+local function cancelPickClickPosition()
+    State.pickingClickPosition = false
+    if pickOverlay then
+        pickOverlay.Visible = false
+    end
+    updateClickMarker()
+end
+
+local function setClickPosition(position)
+    State.clickPosition = Vector2.new(
+        math.floor(position.X),
+        math.floor(position.Y)
+    )
+    updateClickMarker()
+    updateClickPosLabel()
+end
+
+local function startPickClickPosition()
+    cancelPickClickPosition()
+    State.pickingClickPosition = true
+    if pickOverlay then
+        pickOverlay.Visible = true
+    end
+    if clickMarker then
+        clickMarker.Visible = false
+    end
+end
+
+track(RunService.Heartbeat:Connect(function()
+    if not State.autoClickEnabled or State.pickingClickPosition then
+        return
+    end
+
+    local interval = 1 / math.max(State.autoClickCPS, 1)
+    local now = tick()
+    if now - lastAutoClickTime >= interval then
+        lastAutoClickTime = now
+        performVirtualClick(State.clickPosition.X, State.clickPosition.Y)
+    end
+end))
+
 -- GUI helpers
 local function keyLabel(keyCode)
     if not keyCode or keyCode == Enum.KeyCode.Unknown then
@@ -288,6 +386,45 @@ menuToggleBtn.ZIndex = 100
 menuToggleBtn.Parent = screenGui
 addCorner(menuToggleBtn, 28)
 
+clickMarker = Instance.new("Frame")
+clickMarker.Name = "ClickMarker"
+clickMarker.Size = UDim2.new(0, 14, 0, 14)
+clickMarker.AnchorPoint = Vector2.new(0.5, 0.5)
+clickMarker.BackgroundColor3 = Color3.fromRGB(255, 120, 120)
+clickMarker.BorderSizePixel = 0
+clickMarker.ZIndex = 50
+clickMarker.Parent = screenGui
+addCorner(clickMarker, 7)
+
+local markerStroke = Instance.new("UIStroke")
+markerStroke.Color = Color3.fromRGB(255, 255, 255)
+markerStroke.Thickness = 2
+markerStroke.Parent = clickMarker
+
+pickOverlay = Instance.new("TextButton")
+pickOverlay.Name = "PickOverlay"
+pickOverlay.Size = UDim2.new(1, 0, 1, 0)
+pickOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+pickOverlay.BackgroundTransparency = 0.45
+pickOverlay.BorderSizePixel = 0
+pickOverlay.Font = Enum.Font.GothamBold
+pickOverlay.TextSize = 18
+pickOverlay.TextColor3 = Color3.fromRGB(255, 255, 255)
+pickOverlay.Text = "Click anywhere to set autoclick spot\nEsc - cancel"
+pickOverlay.TextWrapped = true
+pickOverlay.Visible = false
+pickOverlay.ZIndex = 2000
+pickOverlay.AutoButtonColor = false
+pickOverlay.Parent = screenGui
+
+pickOverlay.MouseButton1Click:Connect(function()
+    local mousePos = UserInputService:GetMouseLocation()
+    setClickPosition(mousePos)
+    cancelPickClickPosition()
+end)
+
+updateClickMarker()
+
 local menuIconStroke = Instance.new("UIStroke")
 menuIconStroke.Color = Color3.fromRGB(80, 160, 255)
 menuIconStroke.Thickness = 2
@@ -295,8 +432,8 @@ menuIconStroke.Parent = menuToggleBtn
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 260, 0, 318)
-mainFrame.Position = UDim2.new(0, 68, 0.5, -159)
+mainFrame.Size = UDim2.new(0, 260, 0, 400)
+mainFrame.Position = UDim2.new(0, 68, 0.5, -200)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -305,7 +442,7 @@ addCorner(mainFrame, 8)
 
 local settingsFrame = Instance.new("Frame")
 settingsFrame.Name = "Settings"
-settingsFrame.Size = UDim2.new(0, 260, 0, 318)
+settingsFrame.Size = UDim2.new(0, 260, 0, 400)
 settingsFrame.Position = mainFrame.Position
 settingsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 settingsFrame.BorderSizePixel = 0
@@ -382,7 +519,8 @@ end
 local function updateActionButtons()
     flyBtn.Text = string.format("Fly: %s  [%s]", State.flyEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Fly))
     noclipBtn.Text = string.format("Noclip: %s  [%s]", State.noclipEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.Noclip))
-    hintLabel.Text = string.format("%s - menu | CFG - keybinds", keyLabel(Hotkeys.ToggleGUI))
+    autoClickBtn.Text = string.format("AutoClick: %s  [%s]", State.autoClickEnabled and "ВКЛ" or "ВЫКЛ", keyLabel(Hotkeys.AutoClick))
+    hintLabel.Text = string.format("%s menu | %s pick spot | CFG binds", keyLabel(Hotkeys.ToggleGUI), keyLabel(Hotkeys.PickClickPos))
 end
 
 local function updateBindButtons()
@@ -422,11 +560,13 @@ local function closeSettings()
     mainFrame.Visible = State.guiVisible
 end
 
-local bindNames = { "ToggleGUI", "Fly", "Noclip" }
+local bindNames = { "ToggleGUI", "Fly", "Noclip", "AutoClick", "PickClickPos" }
 local bindLabels = {
     ToggleGUI = "Меню",
     Fly = "Fly",
     Noclip = "Noclip",
+    AutoClick = "AutoClick",
+    PickClickPos = "Pick spot",
 }
 
 local REBIND_ACTION = "Patr1kCheatsRebind"
@@ -606,9 +746,68 @@ noclipBtn = makeButton(mainFrame, "Noclip: ВЫКЛ", 198, function()
     updateActionButtons()
 end)
 
+clickPosLabel = Instance.new("TextLabel")
+clickPosLabel.Size = UDim2.new(1, -16, 0, 18)
+clickPosLabel.Position = UDim2.new(0, 8, 0, 228)
+clickPosLabel.BackgroundTransparency = 1
+clickPosLabel.Font = Enum.Font.Gotham
+clickPosLabel.TextSize = 12
+clickPosLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+clickPosLabel.TextXAlignment = Enum.TextXAlignment.Left
+clickPosLabel.Text = "Click pos: ..."
+clickPosLabel.Parent = mainFrame
+
+autoClickBtn = makeButton(mainFrame, "AutoClick: ВЫКЛ", 248, function()
+    toggleAutoClick()
+end)
+
+makeButton(mainFrame, "Pick click spot", 288, function()
+    startPickClickPosition()
+end)
+
+cpsLabel = Instance.new("TextLabel")
+cpsLabel.Size = UDim2.new(1, -16, 0, 18)
+cpsLabel.Position = UDim2.new(0, 8, 0, 328)
+cpsLabel.BackgroundTransparency = 1
+cpsLabel.Font = Enum.Font.Gotham
+cpsLabel.TextSize = 12
+cpsLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+cpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+cpsLabel.Text = "CPS: " .. Config.DefaultCPS
+cpsLabel.Parent = mainFrame
+
+cpsSlider = Instance.new("TextButton")
+cpsSlider.Name = "CpsSlider"
+cpsSlider.Size = UDim2.new(1, -16, 0, 18)
+cpsSlider.Position = UDim2.new(0, 8, 0, 348)
+cpsSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+cpsSlider.BorderSizePixel = 0
+cpsSlider.Text = ""
+cpsSlider.AutoButtonColor = false
+cpsSlider.ClipsDescendants = true
+cpsSlider.Parent = mainFrame
+addCorner(cpsSlider, 9)
+
+cpsFill = Instance.new("Frame")
+cpsFill.BackgroundColor3 = Color3.fromRGB(255, 120, 80)
+cpsFill.BorderSizePixel = 0
+cpsFill.Active = false
+cpsFill.Parent = cpsSlider
+addCorner(cpsFill, 9)
+
+cpsKnob = Instance.new("Frame")
+cpsKnob.Size = UDim2.new(0, 12, 0, 12)
+cpsKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+cpsKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+cpsKnob.BorderSizePixel = 0
+cpsKnob.Active = false
+cpsKnob.ZIndex = 2
+cpsKnob.Parent = cpsSlider
+addCorner(cpsKnob, 6)
+
 hintLabel = Instance.new("TextLabel")
-hintLabel.Size = UDim2.new(1, -16, 0, 48)
-hintLabel.Position = UDim2.new(0, 8, 0, 242)
+hintLabel.Size = UDim2.new(1, -16, 0, 36)
+hintLabel.Position = UDim2.new(0, 8, 0, 372)
 hintLabel.BackgroundTransparency = 1
 hintLabel.Font = Enum.Font.Gotham
 hintLabel.TextSize = 11
@@ -648,16 +847,18 @@ for i, bindName in ipairs(bindNames) do
     bindButtons[bindName] = btn
 end
 
-makeButton(settingsFrame, "Сбросить бинды", 208, function()
+makeButton(settingsFrame, "Сбросить бинды", 288, function()
     Hotkeys.Fly = Config.Hotkeys.Fly
     Hotkeys.Noclip = Config.Hotkeys.Noclip
     Hotkeys.ToggleGUI = Config.Hotkeys.ToggleGUI
+    Hotkeys.AutoClick = Config.Hotkeys.AutoClick
+    Hotkeys.PickClickPos = Config.Hotkeys.PickClickPos
     cancelRebind()
     updateBindButtons()
     updateActionButtons()
 end)
 
-makeButton(settingsFrame, "← Назад", 248, function()
+makeButton(settingsFrame, "← Назад", 328, function()
     cancelRebind()
     closeSettings()
 end)
@@ -672,6 +873,51 @@ end)
 
 updateActionButtons()
 updateBindButtons()
+updateClickPosLabel()
+
+local function updateCpsSlider(value)
+    State.autoClickCPS = math.clamp(math.floor(value), Config.MinCPS, Config.MaxCPS)
+    cpsLabel.Text = "CPS: " .. State.autoClickCPS
+    local ratio = (State.autoClickCPS - Config.MinCPS) / (Config.MaxCPS - Config.MinCPS)
+    cpsFill.Size = UDim2.new(ratio, 0, 1, 0)
+    cpsKnob.Position = UDim2.new(ratio, 0, 0.5, 0)
+end
+
+local draggingCpsSlider = false
+
+local function setCpsFromScreenX(screenX)
+    local relative = math.clamp(
+        (screenX - cpsSlider.AbsolutePosition.X) / cpsSlider.AbsoluteSize.X,
+        0,
+        1
+    )
+    local value = Config.MinCPS + relative * (Config.MaxCPS - Config.MinCPS)
+    updateCpsSlider(value)
+end
+
+cpsSlider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingCpsSlider = true
+        setCpsFromScreenX(input.Position.X)
+    end
+end)
+
+track(UserInputService.InputChanged:Connect(function(input)
+    if draggingCpsSlider and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+        setCpsFromScreenX(input.Position.X)
+    end
+end))
+
+track(UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        draggingCpsSlider = false
+    end
+end))
+
+updateCpsSlider(Config.DefaultCPS)
 
 local function updateSpeedSlider(value)
     State.targetWalkSpeed = math.clamp(math.floor(value), Config.MinWalkSpeed, Config.MaxWalkSpeed)
@@ -761,6 +1007,13 @@ track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
 
+    if State.pickingClickPosition and input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == Enum.KeyCode.Escape then
+            cancelPickClickPosition()
+        end
+        return
+    end
+
     if input.UserInputType ~= Enum.UserInputType.Keyboard then
         return
     end
@@ -777,6 +1030,10 @@ track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     elseif input.KeyCode == Hotkeys.Noclip then
         setNoclip(not State.noclipEnabled)
         updateActionButtons()
+    elseif input.KeyCode == Hotkeys.AutoClick then
+        toggleAutoClick()
+    elseif input.KeyCode == Hotkeys.PickClickPos then
+        startPickClickPosition()
     end
 end))
 
@@ -903,6 +1160,8 @@ if getgenv then
         cancelRebind()
         disconnectAll()
         cleanupFly()
+        cancelPickClickPosition()
+        setAutoClick(false)
         if screenGui and screenGui.Parent then
             screenGui:Destroy()
         end
