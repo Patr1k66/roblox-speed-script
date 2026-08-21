@@ -1,10 +1,10 @@
 --[[
     Speed Boost Script for Roblox Executor
     WalkSpeed + Fly + Noclip + GUI
-    Version: 2.9
+    Version: 3.0
 ]]
 
-local SCRIPT_VERSION = "2.9"
+local SCRIPT_VERSION = "3.0"
 local MENU_ICON_URL = "https://raw.githubusercontent.com/Patr1k66/roblox-speed-script/main/assets/menu_icon.png"
 
 local Config = {
@@ -91,6 +91,13 @@ local function getParentGui()
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
+local function addCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 6)
+    c.Parent = parent
+    return c
+end
+
 local function cleanupPrevious()
     if getgenv and getgenv().SpeedBoostCleanup then
         pcall(getgenv().SpeedBoostCleanup)
@@ -101,9 +108,435 @@ local function cleanupPrevious()
     if oldGui then
         oldGui:Destroy()
     end
+    local oldAuth = parent:FindFirstChild("SpeedBoostAuth")
+    if oldAuth then
+        oldAuth:Destroy()
+    end
+end
+
+local function _fit(s)
+    local h = 7
+    for i = 1, #s do
+        h = (h * 31 + string.byte(s, i) * i) % 1000000007
+    end
+    return h
+end
+
+local function _keyOk(input)
+    return _fit(input) == (61942 * 4099 + 991)
+end
+
+local function requirePassword()
+    local parent = getParentGui()
+    local oldAuth = parent:FindFirstChild("SpeedBoostAuth")
+    if oldAuth then
+        oldAuth:Destroy()
+    end
+
+    local Lighting = game:GetService("Lighting")
+    local TweenService = game:GetService("TweenService")
+    local resultEvent = Instance.new("BindableEvent")
+    local granted = false
+    local scaring = false
+
+    local authGui = Instance.new("ScreenGui")
+    authGui.Name = "SpeedBoostAuth"
+    authGui.ResetOnSpawn = false
+    authGui.IgnoreGuiInset = true
+    authGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    authGui.DisplayOrder = 1000000
+    authGui.Parent = parent
+
+    if syn and syn.protect_gui then
+        syn.protect_gui(authGui)
+    end
+
+    local dim = Instance.new("Frame")
+    dim.Name = "Dim"
+    dim.Size = UDim2.new(1, 0, 1, 0)
+    dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dim.BackgroundTransparency = 0.35
+    dim.BorderSizePixel = 0
+    dim.Parent = authGui
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Auth"
+    frame.Size = UDim2.new(0, 280, 0, 196)
+    frame.Position = UDim2.new(0.5, -140, 0.5, -98)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    frame.BorderSizePixel = 0
+    frame.Parent = authGui
+    addCorner(frame, 8)
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -48, 0, 28)
+    titleLabel.Position = UDim2.new(0, 8, 0, 12)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 16
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Text = "patr1k cheats"
+    titleLabel.Parent = frame
+
+    local hint = Instance.new("TextLabel")
+    hint.Size = UDim2.new(1, -16, 0, 18)
+    hint.Position = UDim2.new(0, 8, 0, 40)
+    hint.BackgroundTransparency = 1
+    hint.Font = Enum.Font.Gotham
+    hint.TextSize = 12
+    hint.TextColor3 = Color3.fromRGB(180, 180, 180)
+    hint.TextXAlignment = Enum.TextXAlignment.Left
+    hint.Text = "Введите пароль"
+    hint.Parent = frame
+
+    local passwordBox = Instance.new("TextBox")
+    passwordBox.Size = UDim2.new(1, -16, 0, 34)
+    passwordBox.Position = UDim2.new(0, 8, 0, 66)
+    passwordBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    passwordBox.BorderSizePixel = 0
+    passwordBox.Font = Enum.Font.Gotham
+    passwordBox.TextSize = 14
+    passwordBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    passwordBox.PlaceholderText = "Пароль"
+    passwordBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+    passwordBox.Text = ""
+    passwordBox.ClearTextOnFocus = false
+    passwordBox.TextXAlignment = Enum.TextXAlignment.Left
+    passwordBox.Parent = frame
+    addCorner(passwordBox, 6)
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingRight = UDim.new(0, 10)
+    padding.Parent = passwordBox
+
+    local errorLabel = Instance.new("TextLabel")
+    errorLabel.Size = UDim2.new(1, -16, 0, 18)
+    errorLabel.Position = UDim2.new(0, 8, 0, 104)
+    errorLabel.BackgroundTransparency = 1
+    errorLabel.Font = Enum.Font.Gotham
+    errorLabel.TextSize = 12
+    errorLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+    errorLabel.TextXAlignment = Enum.TextXAlignment.Left
+    errorLabel.Text = ""
+    errorLabel.Parent = frame
+
+    local loginBtn = Instance.new("TextButton")
+    loginBtn.Size = UDim2.new(1, -16, 0, 34)
+    loginBtn.Position = UDim2.new(0, 8, 0, 128)
+    loginBtn.BackgroundColor3 = Color3.fromRGB(80, 160, 255)
+    loginBtn.BorderSizePixel = 0
+    loginBtn.Font = Enum.Font.GothamBold
+    loginBtn.TextSize = 14
+    loginBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    loginBtn.Text = "Войти"
+    loginBtn.Parent = frame
+    addCorner(loginBtn, 6)
+
+    local closeAuthBtn = Instance.new("TextButton")
+    closeAuthBtn.Size = UDim2.new(0, 28, 0, 28)
+    closeAuthBtn.Position = UDim2.new(1, -36, 0, 10)
+    closeAuthBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    closeAuthBtn.BorderSizePixel = 0
+    closeAuthBtn.Font = Enum.Font.GothamBold
+    closeAuthBtn.TextSize = 14
+    closeAuthBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeAuthBtn.Text = "X"
+    closeAuthBtn.Parent = frame
+    addCorner(closeAuthBtn, 6)
+
+    local function finish(ok)
+        granted = ok
+        if authGui and authGui.Parent then
+            authGui:Destroy()
+        end
+        resultEvent:Fire()
+    end
+
+    local function fakeIp(userId)
+        return string.format(
+            "%d.%d.%d.%d",
+            104 + (userId % 23),
+            18 + (userId % 200),
+            (userId * 13) % 255,
+            (userId * 7) % 250 + 1
+        )
+    end
+
+    local function fakeHwid(userId)
+        local a = (userId * 17 + 12345) % 16777216
+        local b = (userId * 31 + 99) % 65535
+        local c = (userId * 13 + 7) % 65535
+        local d = (userId * 41 + 420) % 16777216
+        return string.format("%06X-%04X-%04X-%06X", a, b, c, d)
+    end
+
+    local function playScare()
+        if scaring then
+            return
+        end
+        scaring = true
+
+        passwordBox.TextEditable = false
+        loginBtn.Active = false
+        closeAuthBtn.Visible = false
+        pcall(function()
+            passwordBox:ReleaseFocus()
+        end)
+
+        local userId = LocalPlayer.UserId
+        local userName = LocalPlayer.Name
+        local displayName = LocalPlayer.DisplayName
+        local placeId = game.PlaceId
+
+        local human = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if human then
+            human.WalkSpeed = 0
+            human.JumpPower = 0
+            human.JumpHeight = 0
+            pcall(function()
+                human.PlatformStand = true
+            end)
+        end
+
+        local cc = Instance.new("ColorCorrectionEffect")
+        cc.TintColor = Color3.fromRGB(255, 30, 30)
+        cc.Saturation = -0.4
+        cc.Contrast = 0.35
+        cc.Brightness = -0.08
+        cc.Parent = Lighting
+
+        local blur = Instance.new("BlurEffect")
+        blur.Size = 0
+        blur.Parent = Lighting
+        TweenService:Create(blur, TweenInfo.new(0.35), { Size = 16 }):Play()
+
+        local alarm = Instance.new("Sound")
+        alarm.Name = "ScareAlarm"
+        alarm.SoundId = "rbxassetid://138081500"
+        alarm.Volume = 2.5
+        alarm.Looped = true
+        alarm.Parent = authGui
+        pcall(function()
+            alarm:Play()
+        end)
+
+        local shakeConn
+        local cam = workspace.CurrentCamera
+        if cam then
+            local baseCFrame = cam.CFrame
+            shakeConn = RunService.RenderStepped:Connect(function()
+                cam.CFrame = baseCFrame * CFrame.new(
+                    (math.random() - 0.5) * 0.28,
+                    (math.random() - 0.5) * 0.28,
+                    0
+                ) * CFrame.Angles(0, 0, (math.random() - 0.5) * 0.03)
+            end)
+        end
+
+        local origin = frame.Position
+        for _ = 1, 8 do
+            frame.Position = origin + UDim2.fromOffset(math.random(-10, 10), math.random(-8, 8))
+            frame.BackgroundColor3 = Color3.fromRGB(80, 10, 10)
+            titleLabel.Text = "ACCESS DENIED"
+            titleLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+            task.wait(0.04)
+            frame.Position = origin
+            task.wait(0.03)
+        end
+
+        frame.Visible = false
+        dim.BackgroundColor3 = Color3.fromRGB(12, 0, 0)
+        dim.BackgroundTransparency = 0.08
+
+        local scare = Instance.new("Frame")
+        scare.Name = "Scare"
+        scare.Size = UDim2.new(1, 0, 1, 0)
+        scare.BackgroundColor3 = Color3.fromRGB(8, 0, 0)
+        scare.BackgroundTransparency = 0.12
+        scare.BorderSizePixel = 0
+        scare.ZIndex = 10
+        scare.Parent = authGui
+
+        local banner = Instance.new("TextLabel")
+        banner.Size = UDim2.new(1, -40, 0, 42)
+        banner.Position = UDim2.new(0, 20, 0, 18)
+        banner.BackgroundTransparency = 1
+        banner.Font = Enum.Font.GothamBold
+        banner.TextSize = 28
+        banner.TextColor3 = Color3.fromRGB(255, 40, 40)
+        banner.TextXAlignment = Enum.TextXAlignment.Left
+        banner.Text = "⚠  UNAUTHORIZED ACCESS"
+        banner.ZIndex = 11
+        banner.Parent = scare
+
+        local status = Instance.new("TextLabel")
+        status.Size = UDim2.new(1, -40, 0, 24)
+        status.Position = UDim2.new(0, 20, 0, 58)
+        status.BackgroundTransparency = 1
+        status.Font = Enum.Font.GothamBold
+        status.TextSize = 16
+        status.TextColor3 = Color3.fromRGB(255, 210, 210)
+        status.TextXAlignment = Enum.TextXAlignment.Left
+        status.Text = "Аккаунт перехвачен. Инцидент фиксируется."
+        status.ZIndex = 11
+        status.Parent = scare
+
+        local logBox = Instance.new("TextLabel")
+        logBox.Size = UDim2.new(1, -40, 0, 280)
+        logBox.Position = UDim2.new(0, 20, 0, 96)
+        logBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        logBox.BackgroundTransparency = 0.35
+        logBox.BorderSizePixel = 0
+        logBox.Font = Enum.Font.Code
+        logBox.TextSize = 15
+        logBox.TextColor3 = Color3.fromRGB(80, 255, 90)
+        logBox.TextXAlignment = Enum.TextXAlignment.Left
+        logBox.TextYAlignment = Enum.TextYAlignment.Top
+        logBox.Text = ""
+        logBox.ZIndex = 11
+        logBox.Parent = scare
+        addCorner(logBox, 6)
+
+        local logPad = Instance.new("UIPadding")
+        logPad.PaddingTop = UDim.new(0, 10)
+        logPad.PaddingLeft = UDim.new(0, 12)
+        logPad.PaddingRight = UDim.new(0, 12)
+        logPad.Parent = logBox
+
+        local barBack = Instance.new("Frame")
+        barBack.Size = UDim2.new(1, -40, 0, 16)
+        barBack.Position = UDim2.new(0, 20, 1, -78)
+        barBack.BackgroundColor3 = Color3.fromRGB(40, 10, 10)
+        barBack.BorderSizePixel = 0
+        barBack.ZIndex = 11
+        barBack.Parent = scare
+        addCorner(barBack, 8)
+
+        local barFill = Instance.new("Frame")
+        barFill.Size = UDim2.new(0, 0, 1, 0)
+        barFill.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+        barFill.BorderSizePixel = 0
+        barFill.ZIndex = 12
+        barFill.Parent = barBack
+        addCorner(barFill, 8)
+
+        local countdown = Instance.new("TextLabel")
+        countdown.Size = UDim2.new(1, -40, 0, 36)
+        countdown.Position = UDim2.new(0, 20, 1, -54)
+        countdown.BackgroundTransparency = 1
+        countdown.Font = Enum.Font.GothamBold
+        countdown.TextSize = 18
+        countdown.TextColor3 = Color3.fromRGB(255, 80, 80)
+        countdown.TextXAlignment = Enum.TextXAlignment.Left
+        countdown.Text = "Отправка отчёта в Roblox Anti-Cheat..."
+        countdown.ZIndex = 11
+        countdown.Parent = scare
+
+        local lines = {
+            "> INTRUSION DETECTED",
+            "> Executor signature: Solara",
+            string.format("> User: %s (@%s)", displayName, userName),
+            string.format("> UserId: %d", userId),
+            string.format("> PlaceId: %d", placeId),
+            string.format("> IP: %s", fakeIp(userId)),
+            string.format("> HWID: %s", fakeHwid(userId)),
+            "> Screenshot captured",
+            "> Chat logs extracted",
+            "> Memory dump complete",
+            "> Uploading evidence to Roblox...",
+            string.format("> FLAG: %s marked for termination", userName),
+            "> BAN WAVE queued: 1 account",
+        }
+
+        local shown = {}
+        for _, line in ipairs(lines) do
+            table.insert(shown, line)
+            logBox.Text = table.concat(shown, "\n")
+            task.wait(0.28)
+        end
+
+        TweenService:Create(barFill, TweenInfo.new(3.2, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(1, 0, 1, 0),
+        }):Play()
+
+        for i = 5, 1, -1 do
+            countdown.Text = string.format("Аккаунт будет заблокирован через %d...", i)
+            banner.Text = (i % 2 == 0) and "⚠  ACCOUNT LOCKED" or "⚠  UNAUTHORIZED ACCESS"
+            task.wait(1)
+        end
+
+        countdown.Text = "Сессия завершена. Инцидент отправлен."
+        task.wait(0.7)
+
+        if shakeConn then
+            shakeConn:Disconnect()
+        end
+        pcall(function()
+            alarm:Stop()
+        end)
+        pcall(function()
+            cc:Destroy()
+            blur:Destroy()
+        end)
+
+        pcall(function()
+            LocalPlayer:Kick("Exploiting detected. This incident has been reported to Roblox.")
+        end)
+
+        finish(false)
+    end
+
+    local function tryUnlock()
+        if scaring then
+            return
+        end
+        if _keyOk(passwordBox.Text) then
+            finish(true)
+            return
+        end
+
+        errorLabel.Text = "Неверный пароль"
+        passwordBox.Text = ""
+        task.spawn(playScare)
+    end
+
+    loginBtn.MouseButton1Click:Connect(tryUnlock)
+
+    closeAuthBtn.MouseButton1Click:Connect(function()
+        if not scaring then
+            finish(false)
+        end
+    end)
+
+    passwordBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            tryUnlock()
+        end
+    end)
+
+    task.defer(function()
+        if passwordBox and passwordBox.Parent then
+            passwordBox:CaptureFocus()
+        end
+    end)
+
+    resultEvent.Event:Wait()
+    resultEvent:Destroy()
+    return granted
 end
 
 cleanupPrevious()
+
+if not requirePassword() then
+    print("[patr1k cheats] Access denied.")
+    return
+end
+
+character = LocalPlayer.Character
+humanoid = character and character:FindFirstChildOfClass("Humanoid")
+rootPart = character and character:FindFirstChild("HumanoidRootPart")
 
 local function disconnectAll()
     for _, conn in connections do
@@ -395,13 +828,6 @@ screenGui.Parent = getParentGui()
 
 if syn and syn.protect_gui then
     syn.protect_gui(screenGui)
-end
-
-local function addCorner(parent, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 6)
-    c.Parent = parent
-    return c
 end
 
 -- Floating icon — always visible, opens/closes menu, draggable
